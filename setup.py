@@ -19,7 +19,8 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 dependencies = [
     'elasticsearch',
-    'requests'
+    'requests',
+    'python-dateutil'
 ]
 
 print("List of dependencies : {0}".format(str(dependencies)))

@@ -1,14 +1,17 @@
-
-""" Elasticsearch logging handler
+"""
+Elasticsearch metric logging
 """
 
 import collections
+import contextlib
 import copy
 import datetime
 import logging
 import os
 import socket
+import time
 import uuid
+from dateutil.tz import tzlocal
 from threading import Timer, Lock
 
 from elasticsearch import Elasticsearch, RequestsHttpConnection
@@ -285,6 +288,20 @@ class ElasticECSMetricsLogger(object):
 
         raise ValueError("Authentication method not supported")
 
+    @staticmethod
+    def __get_es_datetime_str(datetime_object):
+        """
+        Returns elasticsearch utc formatted time for a datetime object
+
+        :param timestamp: epoch, including milliseconds
+        :return: A string valid for elasticsearch time record
+        """
+        if datetime_object.tzinfo is None or datetime_object.tzinfo.utcoffset(datetime_object) is None:
+            raise NaiveDatetimeError('"{}" is not timezone aware.'.format(datetime_object))
+        return "{0!s}.{1:03d}{2}".format(datetime_object.strftime('%Y-%m-%dT%H:%M:%S'),
+                                         int(datetime_object.microsecond / 1000),
+                                         datetime_object.strftime('%z'))
+
     def test_es_source(self):
         """ Returns True if the handler can ping the Elasticsearch servers
 
@@ -294,16 +311,6 @@ class ElasticECSMetricsLogger(object):
         :return: A boolean, True if the connection against elasticserach host was successful
         """
         return self.__get_es_client().ping()
-
-    @staticmethod
-    def __get_es_datetime_str(timestamp):
-        """ Returns elasticsearch utc formatted time for an epoch timestamp
-
-        :param timestamp: epoch, including milliseconds
-        :return: A string valid for elasticsearch time record
-        """
-        current_date = datetime.datetime.utcfromtimestamp(timestamp)
-        return "{0!s}.{1:03d}Z".format(current_date.strftime('%Y-%m-%dT%H:%M:%S'), int(current_date.microsecond / 1000))
 
     def flush(self):
         """
@@ -333,6 +340,41 @@ class ElasticECSMetricsLogger(object):
                 )
             except Exception:
                 logger.exception("Cannot send documents to Elastic.")
+
+    def log_time_metric(self, metric_name, start_datetime, time_us):
+        """
+        Log a new time metric.
+
+        param metric_name: The metric's name.
+        param start_datetime: The datetime where the the timer was started. The datetime object must be timezone aware.
+        param time_us: The time in microsecond.
+        """
+        elastic_document = {
+            '@timestamp': self.__get_es_datetime_str(start_datetime),
+            'metrics': {
+                'name': metric_name,
+                'time': {
+                    'us': int(time_us)
+                }
+            }
+        }
+        self._send_document(elastic_document)
+
+    @contextlib.contextmanager
+    def log_time_metric_timer(self, metric_name):
+        """
+        Return a new context manager with a timer to log a new time metric.
+        It is when the __exit__ method of the context manager is called that a new time metric is logged.
+
+        param: metric_name: The metric's name.
+        return: A context manager with a timer to log a new time metric.
+        """
+        start_datetime = datetime.datetime.now(tzlocal())
+        start_time = time.time()
+        yield
+        end_time = time.time()
+        time_us = int((end_time - start_time) * 1000000)
+        self.log_time_metric(metric_name, start_datetime, time_us)
 
     def _send_document(self, document):
         """
@@ -389,3 +431,10 @@ def _update_nested_dict(source, override):
             _update_nested_dict(source.setdefault(key, {}), value)
         else:
             source[key] = value
+
+
+class NaiveDatetimeError(Exception):
+    """
+    Datetime should be timezone aware because Elasticsearch need timezone aware dates.
+    """
+    pass
