@@ -193,10 +193,8 @@ class ElasticECSMetricsLogger(object):
                     environment variables will be read. If an environment variable for a field doesn't exists, the value
                     of the same field in es_additional_fields will be taken if it exists. In last resort, there will be
                     no value for the field.
-        :return: A ready to be used CMRESHandler.
+        :return: A ready to be used ElasticECSMetricsLogger.
         """
-        logging.Handler.__init__(self)
-
         self.hosts = hosts
         self.auth_details = auth_details
         self.aws_access_key = aws_access_key
@@ -238,6 +236,9 @@ class ElasticECSMetricsLogger(object):
         self._buffer_lock = Lock()
         self._timer = None
         self._index_name_func = ElasticECSMetricsLogger._INDEX_FREQUENCY_FUNCION_DICT[self.index_name_frequency]
+
+    def __del__(self):
+        self.flush()
 
     def __schedule_flush(self):
         if self._timer is None:
