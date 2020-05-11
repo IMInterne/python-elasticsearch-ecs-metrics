@@ -19,7 +19,9 @@ install:
 before_script:
   - sleep 10
 
-script: tox
+script: 
+  - pwd  
+  - tox
 
 after_success:
   - codecov
