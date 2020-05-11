@@ -4,8 +4,6 @@ python:
   - "2.7"
   - "3.8"
 
-sudo: true
-
 services:
   - docker
 
@@ -19,9 +17,7 @@ install:
 before_script:
   - sleep 10
 
-script: 
-  - pwd  
-  - tox
+script: tox
 
 after_success:
   - codecov
