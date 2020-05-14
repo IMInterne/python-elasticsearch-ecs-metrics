@@ -1,5 +1,8 @@
+import datetime
 import os
 import pytest
+
+from dateutil.tz import tzlocal
 
 from elasticecsmetrics import ElasticECSMetricsLogger
 
@@ -25,6 +28,19 @@ def test_ping(es_host, es_port):
                                      use_ssl=False)
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
+
+
+def test_fast_insertion_of_hundred_metrics(es_host, es_port):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     buffer_size=500,
+                                     flush_frequency_in_sec=0.5,
+                                     es_index_name="pythontest")
+    for i in range(100):
+        logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.flush()
+    assert 0 == len(logger._buffer)
 
 
 def test_index_name_frequency_functions(es_host, es_port):
