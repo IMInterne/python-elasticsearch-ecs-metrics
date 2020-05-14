@@ -313,9 +313,10 @@ class ElasticECSMetricsLogger(object):
         """
         return self.__get_es_client().ping()
 
-    def flush(self):
+    def flush(self, reraise_exception = False):
         """
         Flushes the buffer into ES
+        :param reraise_exception: Reraise exception that happened when sending elastic documents.
         :return: None
         """
         if self._timer is not None and self._timer.is_alive():
@@ -341,6 +342,8 @@ class ElasticECSMetricsLogger(object):
                 )
             except Exception:
                 logger.exception("Cannot send documents to Elastic.")
+                if reraise_exception:
+                    raise
 
     def log_time_metric(self, metric_name, start_datetime, time_us):
         """

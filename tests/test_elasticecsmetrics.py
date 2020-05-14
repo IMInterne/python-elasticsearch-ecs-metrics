@@ -39,7 +39,7 @@ def test_fast_insertion_of_hundred_metrics(es_host, es_port):
                                      es_index_name="pythontest")
     for i in range(100):
         logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
-    logger.flush()
+    logger.flush(reraise_exception=True)
     assert 0 == len(logger._buffer)
 
 
