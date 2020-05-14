@@ -1,1 +1,0 @@
-# python-elasticsearch-ecs-metrics
