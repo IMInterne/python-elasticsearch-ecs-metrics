@@ -313,7 +313,7 @@ class ElasticECSMetricsLogger(object):
         """
         return self.__get_es_client().ping()
 
-    def flush(self, reraise_exception = False):
+    def flush(self, reraise_exception=False):
         """
         Flushes the buffer into ES
         :param reraise_exception: Reraise exception that happened when sending elastic documents.
