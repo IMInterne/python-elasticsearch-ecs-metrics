@@ -353,7 +353,8 @@ class ElasticECSMetricsLogger(object):
         param start_datetime: The datetime where the the timer was started. The datetime object must be timezone aware.
         param time_us: The time in microsecond.
         """
-        elastic_document = {
+        elastic_document = copy.deepcopy(self.es_additional_fields)
+        elastic_document.update({
             '@timestamp': self.__get_es_datetime_str(start_datetime),
             'metrics': {
                 'name': metric_name,
@@ -361,7 +362,7 @@ class ElasticECSMetricsLogger(object):
                     'us': int(time_us)
                 }
             }
-        }
+        })
         self._send_document(elastic_document)
 
     @contextlib.contextmanager

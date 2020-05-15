@@ -1,6 +1,7 @@
 import datetime
 import os
 import pytest
+import time
 
 from dateutil.tz import tzlocal
 
@@ -28,6 +29,78 @@ def test_ping(es_host, es_port):
                                      use_ssl=False)
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
+
+
+def test_buffered_metric_insertion_flushed_when_buffer_full(es_host, es_port):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     buffer_size=2,
+                                     flush_frequency_in_sec=1000,
+                                     es_index_name="pythontest")
+
+    es_test_server_is_up = logger.test_es_source()
+    assert es_test_server_is_up
+
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    assert 0 == len(logger._buffer)
+
+
+def test_es_metric_with_additional_env_fields(es_host, es_port):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     es_index_name="pythontest",
+                                     es_additional_fields={'App': 'Test', 'Nested': {'One': '1', 'Two': '2'}},
+                                     es_additional_fields_in_env={'App': 'ENV_APP', 'Environment': 'ENV_ENV',
+                                                                  'Nested': {'One': 'ENV_ONE'}})
+
+    es_test_server_is_up = logger.test_es_source()
+    assert es_test_server_is_up
+
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    assert 1 == len(logger._buffer)
+    assert 'Test' == logger._buffer[0]['App']
+    assert '1' == logger._buffer[0]['Nested']['One']
+    assert '2' == logger._buffer[0]['Nested']['Two']
+    assert 'Environment' not in logger._buffer[0]
+
+    logger.flush(reraise_exception=True)
+    assert 0 == len(logger._buffer)
+
+    os.environ['ENV_APP'] = 'Test2'
+    os.environ['ENV_ENV'] = 'Dev'
+    os.environ['ENV_ONE'] = 'One'
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    assert 1 == len(logger._buffer)
+    assert 'Test2' == logger._buffer[0]['App']
+    assert 'Dev' == logger._buffer[0]['Environment']
+    assert 'One' == logger._buffer[0]['Nested']['One']
+    assert '2' == logger._buffer[0]['Nested']['Two']
+
+    del os.environ['ENV_APP']
+    del os.environ['ENV_ENV']
+    del os.environ['ENV_ONE']
+
+    logger.flush(reraise_exception=True)
+    assert 0 == len(logger._buffer)
+
+
+def test_buffered_log_insertion_after_interval_expired(es_host, es_port):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     flush_frequency_in_sec=0.1,
+                                     es_index_name="pythontest")
+
+    es_test_server_is_up = logger.test_es_source()
+    assert es_test_server_is_up
+
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    assert 1 == len(logger._buffer)
+    time.sleep(1)
+    assert 0 == len(logger._buffer)
 
 
 def test_fast_insertion_of_hundred_metrics(es_host, es_port):
