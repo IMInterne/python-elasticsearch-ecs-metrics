@@ -87,6 +87,24 @@ def test_es_metric_with_additional_env_fields(es_host, es_port):
     assert 0 == len(logger._buffer)
 
 
+def test_log_time_metric_timer(es_host, es_port):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     es_index_name="pythontest")
+
+    es_test_server_is_up = logger.test_es_source()
+    assert es_test_server_is_up
+
+    with logger.log_time_metric_timer('testTimer'):
+        time.sleep(1)
+
+    assert 1 == len(logger._buffer)
+    assert 1000000 <= logger._buffer[0]['metrics']['time']['us']
+    logger.flush(reraise_exception=True)
+    assert 0 == len(logger._buffer)
+
+
 def test_buffered_log_insertion_after_interval_expired(es_host, es_port):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
