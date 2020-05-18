@@ -6,6 +6,8 @@ import collections
 import contextlib
 import copy
 import datetime
+import io
+import json
 import logging
 import os
 import socket
@@ -153,22 +155,24 @@ class ElasticECSMetricsLogger(object):
                  es_index_name=__DEFAULT_ES_INDEX_NAME,
                  index_name_frequency=__DEFAULT_INDEX_FREQUENCY,
                  es_additional_fields=__DEFAULT_ADDITIONAL_FIELDS,
-                 es_additional_fields_in_env=__DEFAULT_ADDITIONAL_FIELDS_IN_ENV):
+                 es_additional_fields_in_env=__DEFAULT_ADDITIONAL_FIELDS_IN_ENV,
+                 flush_failure_folder=None):
         """ Handler constructor
 
         :param hosts: The list of hosts that elasticsearch clients will connect. The list can be provided
                     in the format ```[{'host':'host1','port':9200}, {'host':'host2','port':9200}]``` to
                     make sure the client supports failover of one of the instertion nodes
-        :param auth_details: When ```CMRESHandler.AuthType.BASIC_AUTH``` is used this argument must contain
+        :param auth_details: When ```ElasticECSMetricsLogger.AuthType.BASIC_AUTH``` is used this argument must contain
                     a tuple of string with the user and password that will be used to authenticate against
                     the Elasticsearch servers, for example```('User','Password')
-        :param aws_access_key: When ```CMRESHandler.AuthType.AWS_SIGNED_AUTH``` is used this argument must contain
-                    the AWS key id of the  the AWS IAM user
-        :param aws_secret_key: When ```CMRESHandler.AuthType.AWS_SIGNED_AUTH``` is used this argument must contain
-                    the AWS secret key of the  the AWS IAM user
-        :param aws_region: When ```CMRESHandler.AuthType.AWS_SIGNED_AUTH``` is used this argument must contain
-                    the AWS region of the  the AWS Elasticsearch servers, for example```'us-east'
-        :param auth_type: The authentication type to be used in the connection ```CMRESHandler.AuthType```
+        :param aws_access_key: When ```ElasticECSMetricsLogger.AuthType.AWS_SIGNED_AUTH``` is used
+                    this argument must contain the AWS key id of the  the AWS IAM user
+        :param aws_secret_key: When ```ElasticECSMetricsLogger.AuthType.AWS_SIGNED_AUTH``` is used
+                    this argument must contain the AWS secret key of the  the AWS IAM user
+        :param aws_region: When ```ElasticECSMetricsLogger.AuthType.AWS_SIGNED_AUTH``` is used
+                    this argument must contain the AWS region of the the AWS Elasticsearch servers,
+                    for example```'us-east'
+        :param auth_type: The authentication type to be used in the connection ```ElasticECSMetricsLogger.AuthType```
                     Currently, NO_AUTH, BASIC_AUTH, KERBEROS_AUTH are supported
                     You can pass a str instead of the enum value. It is useful if you are using a config file for
                     configuring the logging module.
@@ -193,6 +197,9 @@ class ElasticECSMetricsLogger(object):
                     environment variables will be read. If an environment variable for a field doesn't exists, the value
                     of the same field in es_additional_fields will be taken if it exists. In last resort, there will be
                     no value for the field.
+        :param flush_failure_folder: A folder where the logger will put the elastic documents in
+                                     JSON files when the flush operation failed.
+                                     If None, this feature is disabled.
         :return: A ready to be used ElasticECSMetricsLogger.
         """
         self.hosts = hosts
@@ -216,6 +223,8 @@ class ElasticECSMetricsLogger(object):
 
         self.es_additional_fields = copy.deepcopy(es_additional_fields.copy())
         self.es_additional_fields.setdefault('ecs', {})['version'] = ElasticECSMetricsLogger.__ECS_VERSION
+
+        self.flush_failure_folder = flush_failure_folder
 
         agent_dict = self.es_additional_fields.setdefault('agent', {})
         agent_dict['ephemeral_id'] = uuid.uuid4()
@@ -289,20 +298,6 @@ class ElasticECSMetricsLogger(object):
 
         raise ValueError("Authentication method not supported")
 
-    @staticmethod
-    def __get_es_datetime_str(datetime_object):
-        """
-        Returns elasticsearch utc formatted time for a datetime object
-
-        :param timestamp: epoch, including milliseconds
-        :return: A string valid for elasticsearch time record
-        """
-        if datetime_object.tzinfo is None or datetime_object.tzinfo.utcoffset(datetime_object) is None:
-            raise NaiveDatetimeError('"{}" is not timezone aware.'.format(datetime_object))
-        return "{0!s}.{1:03d}{2}".format(datetime_object.strftime('%Y-%m-%dT%H:%M:%S'),
-                                         int(datetime_object.microsecond / 1000),
-                                         datetime_object.strftime('%z'))
-
     def test_es_source(self):
         """ Returns True if the handler can ping the Elasticsearch servers
 
@@ -313,7 +308,7 @@ class ElasticECSMetricsLogger(object):
         """
         return self.__get_es_client().ping()
 
-    def flush(self, reraise_exception=False):
+    def flush(self):
         """
         Flushes the buffer into ES
         :param reraise_exception: Reraise exception that happened when sending elastic documents.
@@ -324,6 +319,7 @@ class ElasticECSMetricsLogger(object):
         self._timer = None
 
         if self._buffer:
+            documents_buffer = []
             try:
                 with self._buffer_lock:
                     documents_buffer = self._buffer
@@ -342,8 +338,11 @@ class ElasticECSMetricsLogger(object):
                 )
             except Exception:
                 logger.exception("Cannot send documents to Elastic.")
-                if reraise_exception:
-                    raise
+                if self.flush_failure_folder is not None:
+                    try:
+                        _write_flush_failure_file(documents_buffer, self.flush_failure_folder, self.es_index_name)
+                    except Exception:
+                        logger.exception("Cannot write flush failure file.")
 
     def log_time_metric(self, metric_name, start_datetime, time_us):
         """
@@ -355,7 +354,7 @@ class ElasticECSMetricsLogger(object):
         """
         elastic_document = copy.deepcopy(self.es_additional_fields)
         elastic_document.update({
-            '@timestamp': self.__get_es_datetime_str(start_datetime),
+            '@timestamp': _get_es_datetime_str(start_datetime),
             'metrics': {
                 'name': metric_name,
                 'time': {
@@ -436,6 +435,49 @@ def _update_nested_dict(source, override):
             _update_nested_dict(source.setdefault(key, {}), value)
         else:
             source[key] = value
+
+
+def _write_flush_failure_file(documents_buffer, flush_failure_folder, index_name):
+    """
+    Write a JSON file with the contents of documents_buffer.
+
+    :param documents_buffer: The documents the logger tried to send to Elasticsearch.
+    :param flush_failure_folder: The folder where the the JSON files will be written.
+    :param index_name: The elasticsearch index's name.
+    """
+    flush_file_path = _compute_unique_flush_file_path(flush_failure_folder, index_name)
+    with io.open(flush_file_path, 'w', encoding='utf-8') as flush_file:
+        json.dump(documents_buffer, flush_file)
+
+
+def _compute_unique_flush_file_path(flush_failure_folder, index_name):
+    """
+    Return a file name for the JSON file that doesn't exist yet.
+
+    :param flush_failure_folder: The folder where the the JSON files will be written.
+    :param index_name: The elasticsearch index's name.
+    :return: A file name for the JSON file that doesn't exist yet.
+    """
+    while True:
+        es_datetime_str = _get_es_datetime_str(datetime.datetime.now(tzlocal()))
+        file_name = "failed_flush_{}_{}.json".format(index_name, es_datetime_str)
+        file_path = os.path.join(flush_failure_folder, file_name)
+        if not os.path.isfile(file_path):
+            return file_path
+
+
+def _get_es_datetime_str(datetime_object):
+    """
+    Returns elasticsearch utc formatted time for a datetime object
+
+    :param timestamp: epoch, including milliseconds
+    :return: A string valid for elasticsearch time record
+    """
+    if datetime_object.tzinfo is None or datetime_object.tzinfo.utcoffset(datetime_object) is None:
+        raise NaiveDatetimeError('"{}" is not timezone aware.'.format(datetime_object))
+    return "{0!s}.{1:03d}{2}".format(datetime_object.strftime('%Y-%m-%dT%H:%M:%S'),
+                                     int(datetime_object.microsecond / 1000),
+                                     datetime_object.strftime('%z'))
 
 
 class NaiveDatetimeError(Exception):

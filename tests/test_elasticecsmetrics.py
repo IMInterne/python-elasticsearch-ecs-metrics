@@ -66,7 +66,7 @@ def test_es_metric_with_additional_env_fields(es_host, es_port):
     assert '2' == logger._buffer[0]['Nested']['Two']
     assert 'Environment' not in logger._buffer[0]
 
-    logger.flush(reraise_exception=True)
+    logger.flush()
     assert 0 == len(logger._buffer)
 
     os.environ['ENV_APP'] = 'Test2'
@@ -83,7 +83,7 @@ def test_es_metric_with_additional_env_fields(es_host, es_port):
     del os.environ['ENV_ENV']
     del os.environ['ENV_ONE']
 
-    logger.flush(reraise_exception=True)
+    logger.flush()
     assert 0 == len(logger._buffer)
 
 
@@ -101,7 +101,7 @@ def test_log_time_metric_timer(es_host, es_port):
 
     assert 1 == len(logger._buffer)
     assert 1000000 <= logger._buffer[0]['metrics']['time']['us']
-    logger.flush(reraise_exception=True)
+    logger.flush()
     assert 0 == len(logger._buffer)
 
 
@@ -130,7 +130,7 @@ def test_fast_insertion_of_hundred_metrics(es_host, es_port):
                                      es_index_name="pythontest")
     for i in range(100):
         logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
-    logger.flush(reraise_exception=True)
+    logger.flush()
     assert 0 == len(logger._buffer)
 
 
