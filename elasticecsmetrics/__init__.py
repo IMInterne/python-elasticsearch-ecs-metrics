@@ -35,6 +35,15 @@ except ImportError:
     AWS4AUTH_SUPPORTED = False
 
 
+def now():
+    """
+    A small method to have a datetime object with the local timezone.
+
+    return: A datetime object with the local timezone.
+    """
+    return datetime.datetime.now(tzlocal())
+
+
 class ElasticECSMetricsLogger(object):
     """
     Elasticsearch metrics logger
@@ -349,7 +358,8 @@ class ElasticECSMetricsLogger(object):
         Log a new time metric.
 
         param metric_name: The metric's name.
-        param start_datetime: The datetime where the the timer was started. The datetime object must be timezone aware.
+        param start_datetime: The datetime where the the timer was started.
+            The datetime object must be timezone aware. Use elasticecsmetrics.now() for this.
         param time_us: The time in microsecond.
         """
         elastic_document = copy.deepcopy(self.es_additional_fields)

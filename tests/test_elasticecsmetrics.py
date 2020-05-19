@@ -1,12 +1,9 @@
-import datetime
 import json
 import os
 import pytest
 import time
 
-from dateutil.tz import tzlocal
-
-from elasticecsmetrics import ElasticECSMetricsLogger
+from elasticecsmetrics import ElasticECSMetricsLogger, now
 
 
 @pytest.fixture
@@ -44,8 +41,8 @@ def test_buffered_metric_insertion_flushed_when_buffer_full(es_host, es_port, tm
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
 
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', now(), 0)
+    logger.log_time_metric('test', now(), 0)
     assert 0 == len(logger._buffer)
     assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
@@ -63,7 +60,7 @@ def test_es_metric_with_additional_env_fields(es_host, es_port, tmpdir):
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
 
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', now(), 0)
     assert 1 == len(logger._buffer)
     assert 'Test' == logger._buffer[0]['App']
     assert '1' == logger._buffer[0]['Nested']['One']
@@ -76,7 +73,7 @@ def test_es_metric_with_additional_env_fields(es_host, es_port, tmpdir):
     os.environ['ENV_APP'] = 'Test2'
     os.environ['ENV_ENV'] = 'Dev'
     os.environ['ENV_ONE'] = 'One'
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', now(), 0)
     assert 1 == len(logger._buffer)
     assert 'Test2' == logger._buffer[0]['App']
     assert 'Dev' == logger._buffer[0]['Environment']
@@ -123,7 +120,7 @@ def test_buffered_log_insertion_after_interval_expired(es_host, es_port, tmpdir)
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
 
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', now(), 0)
     assert 1 == len(logger._buffer)
     time.sleep(1)
     assert 0 == len(logger._buffer)
@@ -139,7 +136,7 @@ def test_fast_insertion_of_hundred_metrics(es_host, es_port, tmpdir):
                                      es_index_name="pythontest",
                                      flush_failure_folder=str(tmpdir))
     for i in range(100):
-        logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+        logger.log_time_metric('test', now(), 0)
     logger.flush()
     assert 0 == len(logger._buffer)
     assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
@@ -152,7 +149,7 @@ def test_flush_failed_files(tmpdir):
                                      es_index_name="pythontest",
                                      flush_failure_folder=str(tmpdir))
 
-    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.log_time_metric('test', now(), 0)
     logger.flush()
     assert 0 == len(logger._buffer)
     json_files = tmpdir.listdir(fil=(lambda path: path.ext == '.json'))
