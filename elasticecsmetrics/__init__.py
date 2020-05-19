@@ -6,7 +6,6 @@ import collections
 import contextlib
 import copy
 import datetime
-import io
 import json
 import logging
 import os
@@ -227,7 +226,7 @@ class ElasticECSMetricsLogger(object):
         self.flush_failure_folder = flush_failure_folder
 
         agent_dict = self.es_additional_fields.setdefault('agent', {})
-        agent_dict['ephemeral_id'] = uuid.uuid4()
+        agent_dict['ephemeral_id'] = str(uuid.uuid4())
         agent_dict['type'] = ElasticECSMetricsLogger.__AGENT_TYPE
         agent_dict['version'] = ElasticECSMetricsLogger.__AGENT_VERSION
 
@@ -446,7 +445,7 @@ def _write_flush_failure_file(documents_buffer, flush_failure_folder, index_name
     :param index_name: The elasticsearch index's name.
     """
     flush_file_path = _compute_unique_flush_file_path(flush_failure_folder, index_name)
-    with io.open(flush_file_path, 'w', encoding='utf-8') as flush_file:
+    with open(flush_file_path, 'w') as flush_file:
         json.dump(documents_buffer, flush_file)
 
 

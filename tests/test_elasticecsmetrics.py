@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import pytest
 import time
@@ -31,13 +32,14 @@ def test_ping(es_host, es_port):
     assert es_test_server_is_up
 
 
-def test_buffered_metric_insertion_flushed_when_buffer_full(es_host, es_port):
+def test_buffered_metric_insertion_flushed_when_buffer_full(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
                                      use_ssl=False,
                                      buffer_size=2,
                                      flush_frequency_in_sec=1000,
-                                     es_index_name="pythontest")
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
 
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
@@ -45,13 +47,15 @@ def test_buffered_metric_insertion_flushed_when_buffer_full(es_host, es_port):
     logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
     logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
     assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
 
-def test_es_metric_with_additional_env_fields(es_host, es_port):
+def test_es_metric_with_additional_env_fields(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
                                      use_ssl=False,
                                      es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir),
                                      es_additional_fields={'App': 'Test', 'Nested': {'One': '1', 'Two': '2'}},
                                      es_additional_fields_in_env={'App': 'ENV_APP', 'Environment': 'ENV_ENV',
                                                                   'Nested': {'One': 'ENV_ONE'}})
@@ -85,13 +89,15 @@ def test_es_metric_with_additional_env_fields(es_host, es_port):
 
     logger.flush()
     assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
 
-def test_log_time_metric_timer(es_host, es_port):
+def test_log_time_metric_timer(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
                                      use_ssl=False,
-                                     es_index_name="pythontest")
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
 
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
@@ -103,14 +109,16 @@ def test_log_time_metric_timer(es_host, es_port):
     assert 1000000 <= logger._buffer[0]['metrics']['time']['us']
     logger.flush()
     assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
 
-def test_buffered_log_insertion_after_interval_expired(es_host, es_port):
+def test_buffered_log_insertion_after_interval_expired(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
                                      use_ssl=False,
                                      flush_frequency_in_sec=0.1,
-                                     es_index_name="pythontest")
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
 
     es_test_server_is_up = logger.test_es_source()
     assert es_test_server_is_up
@@ -119,19 +127,42 @@ def test_buffered_log_insertion_after_interval_expired(es_host, es_port):
     assert 1 == len(logger._buffer)
     time.sleep(1)
     assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
 
-def test_fast_insertion_of_hundred_metrics(es_host, es_port):
+def test_fast_insertion_of_hundred_metrics(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
                                      use_ssl=False,
                                      buffer_size=500,
                                      flush_frequency_in_sec=0.5,
-                                     es_index_name="pythontest")
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
     for i in range(100):
         logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
     logger.flush()
     assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
+
+
+def test_flush_failed_files(tmpdir):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': '', 'port': 0}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
+
+    logger.log_time_metric('test', datetime.datetime.now(tzlocal()), 0)
+    logger.flush()
+    assert 0 == len(logger._buffer)
+    json_files = tmpdir.listdir(fil=(lambda path: path.ext == '.json'))
+    assert 1 == len(json_files)
+
+    with open(str(json_files[0]), mode='r') as json_file:
+        failed_flush_buffer = json.load(json_file)
+        assert 1 == len(failed_flush_buffer)
+        assert 'test' == failed_flush_buffer[0]['metrics']['name']
+        assert 0 == failed_flush_buffer[0]['metrics']['time']['us']
 
 
 def test_index_name_frequency_functions(es_host, es_port):
