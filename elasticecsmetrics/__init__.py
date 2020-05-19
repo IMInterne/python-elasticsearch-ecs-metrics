@@ -2,6 +2,7 @@
 Elasticsearch metric logging
 """
 
+import codecs
 import collections
 import contextlib
 import copy
@@ -445,8 +446,8 @@ def _write_flush_failure_file(documents_buffer, flush_failure_folder, index_name
     :param index_name: The elasticsearch index's name.
     """
     flush_file_path = _compute_unique_flush_file_path(flush_failure_folder, index_name)
-    with open(flush_file_path, 'w') as flush_file:
-        json.dump(documents_buffer, flush_file)
+    with open(flush_file_path, 'wb') as flush_file:
+        json.dump(documents_buffer, codecs.getwriter('utf-8')(flush_file), ensure_ascii=False)
 
 
 def _compute_unique_flush_file_path(flush_failure_folder, index_name):
