@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 Elasticsearch metric logging
 """
@@ -106,7 +108,7 @@ class ElasticECSMetricsLogger(object):
         :param: index_name the prefix to be used in the index
         :return: A srting containing the elasticsearch indexname used which should include the date.
         """
-        return "{0!s}-{1!s}".format(es_index_name, datetime.datetime.now().strftime('%Y.%m.%d'))
+        return "{0!s}-{1!s}".format(es_index_name, now().strftime('%Y.%m.%d'))
 
     @staticmethod
     def _get_weekly_index_name(es_index_name):
@@ -114,7 +116,7 @@ class ElasticECSMetricsLogger(object):
         :param: index_name the prefix to be used in the index
         :return: A srting containing the elasticsearch indexname used which should include the date and specific week
         """
-        current_date = datetime.datetime.now()
+        current_date = now()
         start_of_the_week = current_date - datetime.timedelta(days=current_date.weekday())
         return "{0!s}-{1!s}".format(es_index_name, start_of_the_week.strftime('%Y.%m.%d'))
 
@@ -124,7 +126,7 @@ class ElasticECSMetricsLogger(object):
         :param: index_name the prefix to be used in the index
         :return: A srting containing the elasticsearch indexname used which should include the date and specific moth
         """
-        return "{0!s}-{1!s}".format(es_index_name, datetime.datetime.now().strftime('%Y.%m'))
+        return "{0!s}-{1!s}".format(es_index_name, now().strftime('%Y.%m'))
 
     @staticmethod
     def _get_yearly_index_name(es_index_name):
@@ -132,7 +134,7 @@ class ElasticECSMetricsLogger(object):
         :param: index_name the prefix to be used in the index
         :return: A srting containing the elasticsearch indexname used which should include the date and specific year
         """
-        return "{0!s}-{1!s}".format(es_index_name, datetime.datetime.now().strftime('%Y'))
+        return "{0!s}-{1!s}".format(es_index_name, now().strftime('%Y'))
 
     @staticmethod
     def _get_never_index_name(es_index_name):
@@ -363,8 +365,15 @@ class ElasticECSMetricsLogger(object):
         param time_us: The time in microsecond.
         """
         elastic_document = copy.deepcopy(self.es_additional_fields)
+        start_datetime_str = _get_es_datetime_str(start_datetime)
+        end_datetime_str = _get_es_datetime_str(start_datetime + datetime.timedelta(microseconds=time_us))
         elastic_document.update({
-            '@timestamp': _get_es_datetime_str(start_datetime),
+            '@timestamp': start_datetime_str,
+            'event': {
+                'start': start_datetime_str,
+                'end': end_datetime_str,
+                'created': _get_es_datetime_str(now())
+            },
             'metrics': {
                 'name': metric_name,
                 'time': {
@@ -383,7 +392,7 @@ class ElasticECSMetricsLogger(object):
         param: metric_name: The metric's name.
         return: A context manager with a timer to log a new time metric.
         """
-        start_datetime = datetime.datetime.now(tzlocal())
+        start_datetime = now()
         start_time = time.time()
         yield
         end_time = time.time()
@@ -462,18 +471,16 @@ def _write_flush_failure_file(documents_buffer, flush_failure_folder, index_name
 
 def _compute_unique_flush_file_path(flush_failure_folder, index_name):
     """
-    Return a file name for the JSON file that doesn't exist yet.
+    Return a file name for the JSON file.
 
     :param flush_failure_folder: The folder where the the JSON files will be written.
     :param index_name: The elasticsearch index's name.
-    :return: A file name for the JSON file that doesn't exist yet.
+    :return: A file name for the JSON file.
     """
-    while True:
-        es_datetime_str = _get_es_datetime_str(datetime.datetime.now(tzlocal()))
-        file_name = "failed_flush_{}_{}.json".format(index_name, es_datetime_str)
-        file_path = os.path.join(flush_failure_folder, file_name)
-        if not os.path.isfile(file_path):
-            return file_path
+    es_datetime_str = _get_es_datetime_str(now())
+    file_name = "{}_{}_{!s}.json".format(index_name, es_datetime_str, uuid.uuid4())
+    file_path = os.path.join(flush_failure_folder, file_name)
+    return file_path
 
 
 def _get_es_datetime_str(datetime_object):

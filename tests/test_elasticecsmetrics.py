@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import json
 import os
 import pytest
@@ -109,6 +111,23 @@ def test_log_time_metric_timer(es_host, es_port, tmpdir):
     assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
 
 
+def test_unicode_metric_name(es_host, es_port, tmpdir):
+    logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
+                                     auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
+                                     use_ssl=False,
+                                     es_index_name="pythontest",
+                                     flush_failure_folder=str(tmpdir))
+
+    es_test_server_is_up = logger.test_es_source()
+    assert es_test_server_is_up
+
+    logger.log_time_metric(u'😀test', now(), 0)
+    assert 1 == len(logger._buffer)
+    logger.flush()
+    assert 0 == len(logger._buffer)
+    assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
+
+
 def test_buffered_log_insertion_after_interval_expired(es_host, es_port, tmpdir):
     logger = ElasticECSMetricsLogger(hosts=[{'host': es_host, 'port': es_port}],
                                      auth_type=ElasticECSMetricsLogger.AuthType.NO_AUTH,
@@ -149,7 +168,7 @@ def test_flush_failed_files(tmpdir):
                                      es_index_name="pythontest",
                                      flush_failure_folder=str(tmpdir))
 
-    logger.log_time_metric('test', now(), 0)
+    logger.log_time_metric(u'😀test', now(), 0)
     logger.flush()
     assert 0 == len(logger._buffer)
     json_files = tmpdir.listdir(fil=(lambda path: path.ext == '.json'))
@@ -158,7 +177,7 @@ def test_flush_failed_files(tmpdir):
     with open(str(json_files[0]), mode='r') as json_file:
         failed_flush_buffer = json.load(json_file)
         assert 1 == len(failed_flush_buffer)
-        assert 'test' == failed_flush_buffer[0]['metrics']['name']
+        assert u'😀test' == failed_flush_buffer[0]['metrics']['name']
         assert 0 == failed_flush_buffer[0]['metrics']['time']['us']
 
 
