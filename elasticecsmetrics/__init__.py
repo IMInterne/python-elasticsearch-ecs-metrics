@@ -335,6 +335,8 @@ class ElasticECSMetricsLogger(object):
                 with self._buffer_lock:
                     documents_buffer = self._buffer
                     self._buffer = []
+                for document in documents_buffer:
+                    document.setdefault('event', {})['created'] = _get_es_datetime_str(now())
                 actions = (
                     {
                         '_index': self._index_name_func.__func__(self.es_index_name),
@@ -371,8 +373,8 @@ class ElasticECSMetricsLogger(object):
             '@timestamp': start_datetime_str,
             'event': {
                 'start': start_datetime_str,
+                'duration': int(time_us * 1000),
                 'end': end_datetime_str,
-                'created': _get_es_datetime_str(now())
             },
             'metrics': {
                 'name': metric_name,
