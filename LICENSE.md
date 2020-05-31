@@ -1,4 +1,8 @@
-Copyright 2020 Olivier Soucy
+Copyright 2020 InnovMetric Software
+
+A large part of the source code was copied from https://github.com/cmanaha/python-elasticsearch-logger
+
+Copyright 2016 Carlos Manzanedo Rueda
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
