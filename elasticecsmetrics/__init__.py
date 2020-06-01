@@ -270,7 +270,7 @@ class ElasticECSMetricsLogger(object):
         if self.auth_type == ElasticECSMetricsLogger.AuthType.NO_AUTH:
             if self._client is None:
                 self._client = Elasticsearch(hosts=self.hosts,
-                                             use_sl=self.use_ssl,
+                                             use_ssl=self.use_ssl,
                                              verify_certs=self.verify_certs,
                                              connection_class=RequestsHttpConnection)
             return self._client
