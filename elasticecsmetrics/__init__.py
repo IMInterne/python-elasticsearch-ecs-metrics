@@ -378,7 +378,7 @@ class ElasticECSMetricsLogger(object):
             },
             'metrics': {
                 'name': metric_name,
-                'time': {
+                'duration': {
                     'us': int(time_us)
                 }
             }
