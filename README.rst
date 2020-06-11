@@ -14,9 +14,8 @@ This follows the `Elastic Common Schema (ECS) <https://www.elastic.co/guide/en/e
 
 To follow the ECS mapping, please use an index template.
 Look at `ECS Github repository <https://github.com/elastic/ecs>`_ for already generated ECS mappings objects or
-in the mappings folder of this repository where you will find
-one mapping file with all ecs fields plus some added that is used by this logger and another
-one with just the fields used by this logger.
+in the mappings folder of this repository where you will find a mapping file with the fields used by this logger.
+This logger use some custom fields. They are referenced in the mapping file.
 
 The code source is in github at `https://github.com/innovmetric/python-elasticsearch-ecs-metrics
 <https://github.com/innovmetric/python-elasticsearch-ecs-metrics>`_.

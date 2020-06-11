@@ -105,7 +105,7 @@ def test_log_time_metric_timer(es_host, es_port, tmpdir):
         time.sleep(1)
 
     assert 1 == len(logger._buffer)
-    assert 1000000 <= logger._buffer[0]['metrics']['time']['us']
+    assert 1000000 <= logger._buffer[0]['metrics']['duration']['us']
     logger.flush()
     assert 0 == len(logger._buffer)
     assert 0 == len(tmpdir.listdir(fil=(lambda path: path.ext == '.json')))
@@ -178,7 +178,7 @@ def test_flush_failed_files(tmpdir):
         failed_flush_buffer = json.load(json_file)
         assert 1 == len(failed_flush_buffer)
         assert u'😀test' == failed_flush_buffer[0]['metrics']['name']
-        assert 0 == failed_flush_buffer[0]['metrics']['time']['us']
+        assert 0 == failed_flush_buffer[0]['metrics']['duration']['us']
 
 
 def test_index_name_frequency_functions(es_host, es_port):
